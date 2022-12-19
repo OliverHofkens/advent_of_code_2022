@@ -24,13 +24,25 @@ fn main() {
 
     let quality_sum: u64 = blueprints
         .iter()
-        .map(|b| {
-            let best = max_geodes(&mut HashMap::new(), &b, &initial_state);
-            println!("Blueprint {}: Max geodes: {}", b.id, best);
-            b.id * best
-        })
+        .map(|b| b.id * max_geodes(&mut HashMap::new(), &b, &initial_state, &mut 0))
         .sum();
     println!("Part 1: {}", quality_sum);
+
+    let initial_state = State {
+        mins_left: 32,
+        resources: [0; 4],
+        bots: [1, 0, 0, 0],
+    };
+    let geode_product: u64 = blueprints
+        .iter()
+        .take(3)
+        .map(|b| {
+            let best = max_geodes(&mut HashMap::new(), &b, &initial_state, &mut 0);
+            println!("Blueprint {}: Max geodes: {}", b.id, best);
+            best
+        })
+        .product();
+    println!("Part 2: {}", geode_product);
 }
 
 // Resource indices:
@@ -107,13 +119,26 @@ fn parse_input(inp: &str) -> Vec<Blueprint> {
     inp.lines().map(|l| l.into()).collect()
 }
 
-fn max_geodes(cache: &mut HashMap<State, u64>, blueprint: &Blueprint, state: &State) -> u64 {
+fn max_geodes(
+    cache: &mut HashMap<State, u64>,
+    blueprint: &Blueprint,
+    state: &State,
+    current_max: &mut u64,
+) -> u64 {
     if state.mins_left == 0 {
         return state.resources[GEODE];
     }
 
     if let Some(hit) = cache.get(&state) {
         return *hit;
+    }
+
+    // OPTIMIZATION: guess the maximum we can still achieve on this path,
+    // and stop if less than what we already achieved.
+    let guaranteed_res: u64 = state.resources[GEODE] + (state.mins_left as u64 * state.bots[GEODE]);
+    let upper_bound: u64 = guaranteed_res + (1..=state.mins_left).sum::<usize>() as u64;
+    if upper_bound < *current_max {
+        return *current_max;
     }
 
     let mut next_state = state.clone();
@@ -126,7 +151,7 @@ fn max_geodes(cache: &mut HashMap<State, u64>, blueprint: &Blueprint, state: &St
     // Try our different options:
     let mut outcomes: Vec<u64> = Vec::new();
     // 1: Do nothing:
-    outcomes.push(max_geodes(cache, blueprint, &next_state));
+    outcomes.push(max_geodes(cache, blueprint, &next_state, current_max));
 
     // 2: Attempt to build some bots:
     // OPTIMIZATION: Don't build a bot if it can't harvest anyway:
@@ -144,12 +169,13 @@ fn max_geodes(cache: &mut HashMap<State, u64>, blueprint: &Blueprint, state: &St
                 for res in ORE..=OBSIDIAN {
                     _state.resources[res] -= cost[res];
                 }
-                outcomes.push(max_geodes(cache, blueprint, &_state));
+                outcomes.push(max_geodes(cache, blueprint, &_state, current_max));
             }
         }
     }
 
     let res = *outcomes.iter().max().unwrap();
     cache.insert(state.clone(), res);
+    *current_max = max(*current_max, res);
     res
 }
