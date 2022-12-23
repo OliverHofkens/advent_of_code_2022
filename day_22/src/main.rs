@@ -5,17 +5,21 @@ fn main() {
     let inp = get_input_contents();
     let (map, moves) = parse_input(&inp);
 
-    let mut pos = Pos {
+    let mut pos1 = Pos {
         x: map[0].iter().position(|c| *c == '.').unwrap(),
         y: 0,
         dir_x: 1,
         dir_y: 0,
     };
-    println!("{:?}", pos);
-    do_moves(&mut pos, &map, &moves);
-    println!("{:?}", pos);
-    let p1 = pos.password();
+    let mut pos2 = pos1.clone();
+
+    do_moves(&mut pos1, &map, &moves, false);
+    let p1 = pos1.password();
     println!("Part 1: {p1}");
+
+    do_moves(&mut pos2, &map, &moves, true);
+    let p2 = pos2.password();
+    println!("Part 2: {p2}");
 }
 
 #[derive(Debug)]
@@ -27,7 +31,7 @@ enum Move {
 type Map = Vec<Vec<char>>;
 type Moves = Vec<Move>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Pos {
     x: usize,
     y: usize,
@@ -97,7 +101,7 @@ fn parse_input(inp: &str) -> (Map, Moves) {
     (map, moves)
 }
 
-fn do_moves(pos: &mut Pos, map: &Map, moves: &Moves) {
+fn do_moves(pos: &mut Pos, map: &Map, moves: &Moves, cube_map: bool) {
     let mut drawmap = map.clone();
 
     for mv in moves {
@@ -112,16 +116,12 @@ fn do_moves(pos: &mut Pos, map: &Map, moves: &Moves) {
                 pos.dir_x = pos.dir_y;
                 pos.dir_y = -1 * prev_x;
             }
-            Move::Forward(n) if pos.dir_y == 0 => step_horizontal(*n, pos, map),
-            Move::Forward(n) => step_vertical(*n, pos, map),
+            Move::Forward(n) => match cube_map {
+                true => step_cube(*n, pos, map, &mut drawmap),
+                false if pos.dir_y == 0 => step_horizontal(*n, pos, map),
+                false => step_vertical(*n, pos, map),
+            },
         }
-        drawmap[pos.y][pos.x] = match (pos.dir_x, pos.dir_y) {
-            (1, 0) => '>',
-            (0, 1) => 'v',
-            (-1, 0) => '<',
-            (0, -1) => '^',
-            _ => 'o',
-        };
     }
 
     for (i, line) in drawmap.iter().enumerate() {
@@ -186,6 +186,178 @@ fn step_vertical(n: u64, pos: &mut Pos, map: &Map) {
             '.' => pos.y = next_pos,
             '#' => return,
             c => panic!("Unexpected block {c} at {},{next_pos}", pos.x),
+        }
+    }
+}
+
+fn step_cube(n: u64, pos: &mut Pos, map: &Map, drawmap: &mut Map) {
+    // No time for a clean, generic solution. Fck it we ball
+
+    let height = map.len() as i32;
+    let width = map[0].len() as i32;
+
+    for _ in 0..n {
+        let mut next_x = pos.x;
+        let mut next_y = pos.y;
+        let mut next_dirx = pos.dir_x;
+        let mut next_diry = pos.dir_y;
+
+        // Horizontal movement
+        if pos.dir_x != 0 {
+            let check_pos = pos.x as i32 + pos.dir_x;
+
+            match check_pos {
+                // Move left and wrap around:
+                x if pos.dir_x < 0 && (x < 0 || map[pos.y][x as usize] == ' ') => {
+                    match pos.y {
+                        // Face 0 to face 3
+                        y if y < 50 => {
+                            next_dirx = 1;
+                            next_diry = 0;
+                            next_x = 0;
+                            next_y = 149 - y;
+                        }
+                        // Face 2 to face 3
+                        y if y < 100 => {
+                            next_dirx = 0;
+                            next_diry = 1;
+                            next_x = y - 50;
+                            next_y = 100;
+                        }
+                        // Face 3 to face 0
+                        y if y < 150 => {
+                            next_dirx = 1;
+                            next_diry = 0;
+                            next_x = 50;
+                            next_y = 149 - y;
+                        }
+                        // Face 5 to face 0
+                        y => {
+                            next_dirx = 0;
+                            next_diry = 1;
+                            next_x = y - 100;
+                            next_y = 0;
+                        }
+                    }
+                }
+                // Move right and wrap around:
+                x if pos.dir_x > 0 && (x > width - 1 || map[pos.y][x as usize] == ' ') => {
+                    match pos.y {
+                        // Face 1 to face 4
+                        y if y < 50 => {
+                            next_dirx = -1;
+                            next_diry = 0;
+                            next_x = 99;
+                            next_y = 149 - y;
+                        }
+                        // Face 2 to face 1
+                        y if y < 100 => {
+                            next_dirx = 0;
+                            next_diry = -1;
+                            next_x = y + 50;
+                            next_y = 49;
+                        }
+                        // Face 4 to face 1
+                        y if y < 150 => {
+                            next_dirx = -1;
+                            next_diry = 0;
+                            next_x = 149;
+                            next_y = 149 - y;
+                        }
+                        // Face 5 to face 4
+                        y => {
+                            next_dirx = 0;
+                            next_diry = -1;
+                            next_x = y - 100;
+                            next_y = 149;
+                        }
+                    }
+                }
+                // No wrapping:
+                x => {
+                    next_x = x as usize;
+                }
+            };
+        }
+        // Vertical movement
+        else {
+            let check_pos = pos.y as i32 + pos.dir_y;
+
+            match check_pos {
+                // Move up and wrap around:
+                y if pos.dir_y < 0 && (y < 0 || map[y as usize][pos.x] == ' ') => match pos.x {
+                    // Face 3 to face 2
+                    x if x < 50 => {
+                        next_dirx = 1;
+                        next_diry = 0;
+                        next_x = 50;
+                        next_y = 50 + x;
+                    }
+                    // Face 0 to face 5
+                    x if x < 100 => {
+                        next_dirx = 1;
+                        next_diry = 0;
+                        next_x = 0;
+                        next_y = 100 + x;
+                    }
+                    // Face 1 to face 5
+                    x => {
+                        next_dirx = 0;
+                        next_diry = -1;
+                        next_x = x - 100;
+                        next_y = 199;
+                    }
+                },
+                // Move down and wrap around:
+                y if pos.dir_y > 0 && (y > height - 1 || map[y as usize][pos.x] == ' ') => {
+                    match pos.x {
+                        // Face 5 to face 1
+                        x if x < 50 => {
+                            next_dirx = 0;
+                            next_diry = 1;
+                            next_x = x + 100;
+                            next_y = 0;
+                        }
+                        // Face 4 to face 5
+                        x if x < 100 => {
+                            next_dirx = -1;
+                            next_diry = 0;
+                            next_x = 49;
+                            next_y = x + 100;
+                        }
+                        // Face 1 to face 2
+                        x => {
+                            next_dirx = -1;
+                            next_diry = 0;
+                            next_x = 99;
+                            next_y = x - 50;
+                        }
+                    }
+                }
+                // No wrapping:
+                y => {
+                    next_y = y as usize;
+                }
+            };
+        }
+
+        match map[next_y][next_x] {
+            '.' => {
+                pos.dir_x = next_dirx;
+                pos.dir_y = next_diry;
+                pos.x = next_x;
+                pos.y = next_y;
+
+                drawmap[pos.y][pos.x] = match (pos.dir_x, pos.dir_y) {
+                    (1, 0) => '>',
+                    (0, 1) => 'v',
+                    (-1, 0) => '<',
+                    (0, -1) => '^',
+                    _ => 'o',
+                };
+            }
+            '#' => return,
+            c => panic!("Unexpected block {c} at {next_x},{next_y}"),
         }
     }
 }
