@@ -5,12 +5,16 @@ use std::fs;
 fn main() {
     let inp = get_input_contents();
     let mut positions = parse_input(&inp);
+    let mut positions_2 = positions.clone();
 
     let (bottom_left, top_right) = bounding_box(&positions);
-    simulate(&mut positions, 10);
+    let _ = simulate(&mut positions, 10);
     draw_map(&positions);
     let p1 = empty_space(&positions);
     println!("Part 1: {p1}");
+
+    let p2 = simulate(&mut positions_2, usize::MAX);
+    println!("Part 2: {p2}");
 }
 
 type Pos = (i64, i64);
@@ -21,7 +25,7 @@ enum Dir {
     W,
 }
 
-fn simulate(positions: &mut HashSet<Pos>, rounds: usize) {
+fn simulate(positions: &mut HashSet<Pos>, rounds: usize) -> usize {
     let mut dir_order = VecDeque::from([Dir::N, Dir::S, Dir::W, Dir::E]);
 
     // <proposed, from>
@@ -58,6 +62,7 @@ fn simulate(positions: &mut HashSet<Pos>, rounds: usize) {
             }
         }
 
+        let mut any_moved = false;
         // Move phase:
         for (to, from) in proposed.drain() {
             // Only move if exactly 1 elf wants to move there
@@ -66,12 +71,18 @@ fn simulate(positions: &mut HashSet<Pos>, rounds: usize) {
                 positions.remove(&from[0]);
                 // Add the new pos:
                 positions.insert(to);
+                any_moved = true;
             }
+        }
+        if !any_moved {
+            return _rnd + 1;
         }
 
         // Rotate phase
         dir_order.rotate_left(1);
     }
+
+    rounds
 }
 
 fn neighbors(pos: &Pos) -> Vec<Pos> {
